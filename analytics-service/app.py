@@ -35,7 +35,8 @@ try:
     session = boto3.Session(region_name=AWS_REGION)
     sqs_client = session.client("sqs")
     dynamodb_client = session.client("dynamodb", endpoint_url=DYNAMODB_ENDPOINT)
-    log.info(f"Clientes Boto3 inicializados na região {AWS_REGION} (DynamoDB endpoint: {DYNAMODB_ENDPOINT or 'AWS real'})")
+    log.info(f"Clientes Boto3 inicializados na região {
+             AWS_REGION} (DynamoDB endpoint: {DYNAMODB_ENDPOINT or 'AWS real'})")
 except NoCredentialsError:
     log.critical("Credenciais da AWS não encontradas. Verifique seu ambiente.")
     sys.exit(1)
@@ -51,10 +52,10 @@ def process_message(message):
     try:
         log.info(f"Processando mensagem ID: {message['MessageId']}")
         body = json.loads(message['Body'])
-        
+
         # Gera um ID único para o item no DynamoDB
         event_id = str(uuid.uuid4())
-        
+
         # Constrói o item no formato do DynamoDB
         item = {
             'event_id': {'S': event_id},
@@ -63,21 +64,21 @@ def process_message(message):
             'result': {'BOOL': body['result']},
             'timestamp': {'S': body['timestamp']}
         }
-        
+
         # Insere no DynamoDB
         dynamodb_client.put_item(
             TableName=DYNAMODB_TABLE_NAME,
             Item=item
         )
-        
+
         log.info(f"Evento {event_id} (Flag: {body['flag_name']}) salvo no DynamoDB.")
-        
+
         # Se tudo deu certo, deleta a mensagem da fila
         sqs_client.delete_message(
             QueueUrl=SQS_QUEUE_URL,
             ReceiptHandle=message['ReceiptHandle']
         )
-        
+
     except json.JSONDecodeError:
         log.error(f"Erro ao decodificar JSON da mensagem ID: {message['MessageId']}")
         # Não deleta a mensagem, pode ser uma "poison pill"
@@ -87,6 +88,7 @@ def process_message(message):
     except Exception as e:
         log.error(f"Erro inesperado ao processar {message['MessageId']}: {e}")
         # Não deleta a mensagem, tenta novamente
+
 
 def sqs_worker_loop():
     """ Loop principal do worker que ouve a fila SQS """
@@ -99,27 +101,29 @@ def sqs_worker_loop():
                 MaxNumberOfMessages=10,  # Processa em lotes de até 10
                 WaitTimeSeconds=20
             )
-            
+
             messages = response.get('Messages', [])
             if not messages:
                 # Nenhuma mensagem, continua o loop
                 continue
-                
+
             log.info(f"Recebidas {len(messages)} mensagens.")
-            
+
             for message in messages:
                 process_message(message)
-                
+
         except ClientError as e:
             log.error(f"Erro do Boto3 no loop principal do SQS: {e}")
-            time.sleep(10) # Pausa antes de tentar novamente
+            time.sleep(10)  # Pausa antes de tentar novamente
         except Exception as e:
             log.error(f"Erro inesperado no loop principal do SQS: {e}")
             time.sleep(10)
 
 # --- Servidor Flask (Apenas para Health Check) ---
 
+
 app = Flask(__name__)
+
 
 @app.route('/health')
 def health():
@@ -128,10 +132,12 @@ def health():
 
 # --- Inicialização ---
 
+
 def start_worker():
     """ Inicia o worker SQS em uma thread separada """
     worker_thread = threading.Thread(target=sqs_worker_loop, daemon=True)
     worker_thread.start()
+
 
 # Inicia o worker SQS em uma thread de background
 # Isso garante que ele inicie tanto com 'flask run' quanto com 'gunicorn'
