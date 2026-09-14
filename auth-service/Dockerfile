@@ -1,5 +1,5 @@
 # --- Estágio 1: Build ---
-FROM golang:1.21-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 WORKDIR /app
 
@@ -12,9 +12,9 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server .
 
 # --- Estágio 2: Runtime ---
-FROM alpine:3.19
+FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates
+RUN apk update && apk upgrade --no-cache && apk add --no-cache ca-certificates
 
 WORKDIR /app
 COPY --from=builder /app/server .

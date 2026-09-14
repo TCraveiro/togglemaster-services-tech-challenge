@@ -1,0 +1,5 @@
+
+# Binários compilados localmente
+auth-service/auth-service
+evaluation-service/evaluation-service
+*.tar.gz
