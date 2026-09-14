@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
         "os"
 	"sync"
 	"time"
@@ -101,13 +102,13 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 
 // fetchFlag (função helper)
 func (a *App) fetchFlag(flagName string) (*Flag, error) {
-	url := fmt.Sprintf("%s/flags/%s", a.FlagServiceURL, flagName)
+	url := fmt.Sprintf("%s/flags/%s", a.FlagServiceURL, url.PathEscape(flagName))
 
 	apiKey := os.Getenv("SERVICE_API_KEY")
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequest("GET", url, nil) // #nosec G704 -- URL base vem de variável de ambiente confiável; flagName é sanitizado via url.PathEscape acima
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	
-	resp, err := a.HttpClient.Do(req)
+	resp, err := a.HttpClient.Do(req) // #nosec G704 -- URL sanitizada, ver comentário acima
 	if err != nil {
 		return nil, fmt.Errorf("erro ao chamar flag-service: %w", err)
 	}
@@ -129,12 +130,12 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 }
 
 func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
-	url := fmt.Sprintf("%s/rules/%s", a.TargetingServiceURL, flagName)
+	url := fmt.Sprintf("%s/rules/%s", a.TargetingServiceURL, url.PathEscape(flagName))
 	apiKey := os.Getenv("SERVICE_API_KEY") // Usa a mesma chave
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequest("GET", url, nil) // #nosec G704 -- URL base vem de variável de ambiente confiável; flagName é sanitizado via url.PathEscape acima
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	
-	resp, err := a.HttpClient.Do(req)
+	resp, err := a.HttpClient.Do(req) // #nosec G704 -- URL sanitizada, ver comentário acima
 	if err != nil {
 		return nil, fmt.Errorf("erro ao chamar targeting-service: %w", err)
 	}
