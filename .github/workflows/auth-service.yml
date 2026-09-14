@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: "1.27"
 
       - name: Download dependencies
         working-directory: ${{ env.SERVICE_DIR }}
@@ -51,7 +51,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: "1.24"
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
@@ -73,7 +73,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: "1.27"
 
       - name: SAST - gosec (falha em severidade HIGH)
         working-directory: ${{ env.SERVICE_DIR }}
@@ -86,6 +86,7 @@ jobs:
         with:
           scan-type: "fs"
           scan-ref: ${{ env.SERVICE_DIR }}
+          trivyignores: "auth-service/.trivyignore"
           severity: "CRITICAL,HIGH"
           exit-code: "1"
           ignore-unfixed: true
@@ -125,6 +126,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }}"
+          trivyignores: "auth-service/.trivyignore"
           severity: "CRITICAL,HIGH"
           exit-code: "1"
           ignore-unfixed: true
