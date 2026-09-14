@@ -1,0 +1,106 @@
+name: CI - evaluation-service
+
+on:
+  push:
+    branches: [main]
+    paths: ["evaluation-service/**"]
+  pull_request:
+    branches: [main]
+    paths: ["evaluation-service/**"]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: evaluation-service
+  SERVICE_DIR: evaluation-service
+
+jobs:
+  build-test:
+    name: Build & Unit Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+      - name: Download dependencies
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: go mod download
+      - name: Build
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: go build -v ./...
+      - name: Unit tests
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: go test -v ./...
+
+  lint:
+    name: Linter (golangci-lint)
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: ${{ env.SERVICE_DIR }}
+          args: --timeout=5m
+
+  security-scan:
+    name: Security Scan (SAST + SCA)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+      - name: SAST - gosec (falha em severidade HIGH)
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -severity high -confidence high ./...
+      - name: SCA - Trivy filesystem scan (dependências)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: "fs"
+          scan-ref: ${{ env.SERVICE_DIR }}
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true
+
+  docker-build-push:
+    name: Docker Build, Scan & Push
+    needs: security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gerar tag da imagem (commit hash)
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login no ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build da imagem Docker
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: |
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }} .
+      - name: Container Scan (Trivy image)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }}"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Push da imagem para o ECR
+        run: |
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }}

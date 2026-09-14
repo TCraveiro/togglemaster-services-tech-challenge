@@ -1,0 +1,131 @@
+name: CI - targeting-service
+
+on:
+  push:
+    branches: [main]
+    paths: ["targeting-service/**"]
+  pull_request:
+    branches: [main]
+    paths: ["targeting-service/**"]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: targeting-service
+  SERVICE_DIR: targeting-service
+
+jobs:
+  # ============================================================
+  # 1. Build & Unit Test
+  # ============================================================
+  build-test:
+    name: Build & Unit Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: pip install -r requirements.txt
+
+      - name: Unit tests (pytest, se houver)
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: |
+          pip install pytest
+          if find . -name "test_*.py" -o -name "*_test.py" | grep -q .; then
+            pytest -v
+          else
+            echo "Nenhum teste unitário encontrado, pulando."
+          fi
+
+  # ============================================================
+  # 2. Linter / Static Analysis
+  # ============================================================
+  lint:
+    name: Linter (flake8)
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: flake8
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: |
+          pip install flake8
+          flake8 . --max-line-length=120 --extend-ignore=E203,W503
+
+  # ============================================================
+  # 3. Security Scan - SAST (bandit) & SCA (Trivy fs)
+  # ============================================================
+  security-scan:
+    name: Security Scan (SAST + SCA)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: SAST - bandit (falha em severidade HIGH)
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: |
+          pip install bandit
+          bandit -r . -lll
+
+      - name: SCA - Trivy filesystem scan (dependências)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: "fs"
+          scan-ref: ${{ env.SERVICE_DIR }}
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true
+
+  # ============================================================
+  # 4. Docker Build & Push (com Container Scan)
+  # ============================================================
+  docker-build-push:
+    name: Docker Build, Scan & Push
+    needs: security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gerar tag da imagem (commit hash)
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build da imagem Docker
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: |
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }} .
+
+      - name: Container Scan (Trivy image)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }}"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Push da imagem para o ECR
+        run: |
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }}
