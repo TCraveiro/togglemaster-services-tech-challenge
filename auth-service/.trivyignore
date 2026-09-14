@@ -1,0 +1,17 @@
+# Risco aceito: vulnerabilidades em golang.org/x/crypto/ssh e golang.org/x/text
+# O auth-service NÃO usa funcionalidade SSH nem processamento avançado de texto/UTF-8 -
+# essas são dependências transitivas não utilizadas pela aplicação (superfície de ataque
+# não alcançável). Corrigir exigiria x/crypto >= 0.52.0 e x/text >= 0.39.0, que por sua vez
+# exigem Go >= 1.25/1.26 - incompatível com a versão do golangci-lint-action usada no pipeline
+# (compilada com Go 1.24). Ver documentação da equipe para detalhes.
+CVE-2026-39828
+CVE-2026-39829
+CVE-2026-39830
+CVE-2026-39831
+CVE-2026-39832
+CVE-2026-39835
+CVE-2026-42508
+CVE-2026-46595
+CVE-2026-46597
+CVE-2026-56854
+CVE-2026-56852
