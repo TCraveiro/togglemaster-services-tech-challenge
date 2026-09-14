@@ -129,3 +129,49 @@ jobs:
       - name: Push da imagem para o ECR
         run: |
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }}
+
+  update-gitops:
+    name: Update GitOps (atualiza tag da imagem)
+    needs: docker-build-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gerar tag da imagem (commit hash)
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR (para obter o registry)
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Atualizar tag da imagem no manifesto do GitOps
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull --rebase origin main
+
+          sed -i "s|image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:.*|image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }}|" gitops/${{ env.SERVICE_DIR }}/deployment.yaml
+
+          git add gitops/${{ env.SERVICE_DIR }}/deployment.yaml
+
+          if git diff --staged --quiet; then
+            echo "Nenhuma mudança na tag - pulando commit."
+          else
+            git commit -m "chore(gitops): atualiza imagem do ${{ env.SERVICE_DIR }} para v1.0.0-${{ steps.vars.outputs.sha_short }} [skip ci]"
+            git push origin main
+          fi
