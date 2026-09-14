@@ -82,7 +82,7 @@ jobs:
           gosec -severity high -confidence high ./...
 
       - name: SCA - Trivy filesystem scan (dependências)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "fs"
           scan-ref: ${{ env.SERVICE_DIR }}
@@ -122,7 +122,7 @@ jobs:
           docker build -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }} .
 
       - name: Container Scan (Trivy image)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.0.0-${{ steps.vars.outputs.sha_short }}"
           severity: "CRITICAL,HIGH"
