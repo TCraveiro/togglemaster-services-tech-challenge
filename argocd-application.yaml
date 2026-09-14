@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: togglemaster
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/TCraveiro/togglemaster-services-tech-challenge.git
+    targetRevision: main
+    path: gitops
+    directory:
+      recurse: true
+      exclude: "{**/secret.yaml}"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: togglemaster
+
+  syncPolicy:
+    automated:
+      prune: true      # remove recursos que saírem do Git
+      selfHeal: true    # corrige mudanças manuais feitas fora do Git
+    syncOptions:
+      - CreateNamespace=true

@@ -23,6 +23,8 @@ spec:
           envFrom:
             - secretRef:
                 name: targeting-service-secret
+            - configMapRef:
+                name: targeting-service-config
           resources:
             requests:
               cpu: "100m"

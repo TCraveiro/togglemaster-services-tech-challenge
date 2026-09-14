@@ -23,6 +23,8 @@ spec:
           envFrom:
             - secretRef:
                 name: flag-service-secret
+            - configMapRef:
+                name: flag-service-config
           resources:
             requests:
               cpu: "100m"
