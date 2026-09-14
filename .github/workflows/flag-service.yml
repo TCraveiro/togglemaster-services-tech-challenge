@@ -3,10 +3,10 @@ name: CI - flag-service
 on:
   push:
     branches: [main]
-    paths: ["flag-service/**"]
+    paths: ["flag-service/**", ".github/workflows/flag-service.yml"]
   pull_request:
     branches: [main]
-    paths: ["flag-service/**"]
+    paths: ["flag-service/**", ".github/workflows/flag-service.yml"]
 
 env:
   AWS_REGION: us-east-1

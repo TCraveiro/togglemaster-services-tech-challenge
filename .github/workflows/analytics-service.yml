@@ -3,10 +3,10 @@ name: CI - analytics-service
 on:
   push:
     branches: [main]
-    paths: ["analytics-service/**"]
+    paths: ["analytics-service/**", ".github/workflows/analytics-service.yml"]
   pull_request:
     branches: [main]
-    paths: ["analytics-service/**"]
+    paths: ["analytics-service/**", ".github/workflows/analytics-service.yml"]
 
 env:
   AWS_REGION: us-east-1
