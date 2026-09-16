@@ -178,8 +178,20 @@ jobs:
           git add gitops/${{ env.SERVICE_DIR }}/deployment.yaml
 
           if git diff --staged --quiet; then
-            echo "Nenhuma mudança na tag - pulando commit."
+            echo "Nenhuma mudanca na tag - pulando commit."
           else
             git commit -m "chore(gitops): atualiza imagem do ${{ env.SERVICE_DIR }} para v1.0.0-${{ steps.vars.outputs.sha_short }} [skip ci]"
-            git push origin main
+
+            n=0
+            until [ $n -ge 5 ]
+            do
+              if git push origin main; then
+                echo "Push realizado com sucesso."
+                break
+              fi
+              n=$((n+1))
+              echo "Push falhou (tentativa $n) - outro servico deve ter commitado ao mesmo tempo. Tentando novamente..."
+              git pull --rebase origin main
+              sleep $((RANDOM % 5 + 2))
+            done
           fi
