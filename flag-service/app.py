@@ -9,16 +9,13 @@ from dotenv import load_dotenv
 from functools import wraps
 import logging
 
-# Configura o logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-# Carrega .env para desenvolvimento local
 load_dotenv()
 
 app = Flask(__name__)
 
-# --- Configuração ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL")
 
@@ -26,8 +23,6 @@ if not DATABASE_URL or not AUTH_SERVICE_URL:
     log.critical("Erro: DATABASE_URL e AUTH_SERVICE_URL devem ser definidos.")
     sys.exit(1)
 
-# --- Pool de Conexão com o Banco ---
-# Inicializa o pool de conexões (Mín: 1, Máx: 5 conexões)
 try:
     pool = SimpleConnectionPool(1, 5, dsn=DATABASE_URL)
     log.info("Pool de conexões com o PostgreSQL inicializado.")
@@ -36,7 +31,6 @@ except psycopg2.OperationalError as e:
     sys.exit(1)
 
 # --- Middleware de Autenticação ---
-
 
 def require_auth(f):
     """ Middleware para validar a chave de API contra o auth-service """
@@ -47,7 +41,6 @@ def require_auth(f):
             return jsonify({"error": "Authorization header obrigatório"}), 401
 
         try:
-            # Chama o /validate do auth-service
             validate_url = f"{AUTH_SERVICE_URL}/validate"
             response = requests.get(validate_url, headers={"Authorization": auth_header}, timeout=3)
 
@@ -62,17 +55,12 @@ def require_auth(f):
             log.error(f"Erro ao conectar com o auth-service: {e}")
             return jsonify({"error": "Serviço de autenticação indisponível"}), 503  # Service Unavailable
 
-        # Se a chave for válida, continua para a rota
         return f(*args, **kwargs)
     return decorated
-
-# --- Endpoints da API ---
-
 
 @app.route('/health')
 def health():
     return jsonify({"status": "ok"})
-
 
 @app.route('/flags', methods=['POST'])
 @require_auth
@@ -116,7 +104,6 @@ def create_flag():
         if conn:
             pool.putconn(conn)
 
-
 @app.route('/flags', methods=['GET'])
 @require_auth
 def get_flags():
@@ -137,7 +124,6 @@ def get_flags():
             cur.close()
         if conn:
             pool.putconn(conn)
-
 
 @app.route('/flags/<string:name>', methods=['GET'])
 @require_auth
@@ -162,7 +148,6 @@ def get_flag(name):
         if conn:
             pool.putconn(conn)
 
-
 @app.route('/flags/<string:name>', methods=['PUT'])
 @require_auth
 def update_flag(name):
@@ -174,7 +159,6 @@ def update_flag(name):
     fields = []
     values = []
 
-    # Constrói a query dinamicamente
     if 'description' in data:
         fields.append("description = %s")
         values.append(data['description'])
@@ -214,7 +198,6 @@ def update_flag(name):
         if conn:
             pool.putconn(conn)
 
-
 @app.route('/flags/<string:name>', methods=['DELETE'])
 @require_auth
 def delete_flag(name):
@@ -243,9 +226,6 @@ def delete_flag(name):
         if conn:
             pool.putconn(conn)
 
-
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8002))
     app.run(host='0.0.0.0', port=port, debug=False)
-# demo fase 3
-# demo 2  fase 3

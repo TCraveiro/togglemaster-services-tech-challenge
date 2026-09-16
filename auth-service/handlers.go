@@ -27,7 +27,6 @@ func (a *App) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 // validateKeyHandler verifica se uma chave de API (enviada via Header) é válida
 func (a *App) validateKeyHandler(w http.ResponseWriter, r *http.Request) {
-	// Extrai a chave do header "Authorization: Bearer <key>"
 	authHeader := r.Header.Get("Authorization")
 	keyString := strings.TrimPrefix(authHeader, "Bearer ")
 
@@ -36,20 +35,17 @@ func (a *App) validateKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calcula o hash da chave recebida
 	keyHash := hashAPIKey(keyString)
 
 	// Verifica se o hash existe no banco de dados
 	var id int
 	err := a.DB.QueryRow("SELECT id FROM api_keys WHERE key_hash = $1 AND is_active = true", keyHash).Scan(&id)
 	if err != nil {
-		// Se não encontrar (sql.ErrNoRows), ou qualquer outro erro, a chave é inválida
 		log.Printf("Falha na validação da chave (hash: %s...): %v", keyHash[:6], err)
 		http.Error(w, "Chave de API inválida ou inativa", http.StatusUnauthorized)
 		return
 	}
 
-	// Chave válida
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"message": "Chave válida"})
 }
@@ -72,7 +68,6 @@ func (a *App) createKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Gera uma nova chave e seu hash
 	newKey, err := generateAPIKey()
 	if err != nil {
 		http.Error(w, "Erro ao gerar a chave", http.StatusInternalServerError)
@@ -102,8 +97,6 @@ func (a *App) createKeyHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// --- Middleware ---
-
 // masterKeyAuthMiddleware protege endpoints que só podem ser acessados com a MASTER_KEY
 func (a *App) masterKeyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +107,6 @@ func (a *App) masterKeyAuthMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "Acesso não autorizado", http.StatusForbidden)
 			return
 		}
-		// Se a chave for válida, continua para o handler principal
 		next.ServeHTTP(w, r)
 	})
 }

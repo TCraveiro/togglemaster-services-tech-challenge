@@ -15,19 +15,16 @@ import (
 )
 
 const (
-	// Tempo de vida do cache em segundos
 	CACHE_TTL = 30 * time.Second
 )
 
 // getDecision é o wrapper principal
 func (a *App) getDecision(userID, flagName string) (bool, error) {
-	// 1. Obter os dados da flag (do cache ou dos serviços)
 	info, err := a.getCombinedFlagInfo(flagName)
 	if err != nil {
 		return false, err
 	}
 
-	// 2. Executar a lógica de avaliação
 	return a.runEvaluationLogic(info, userID), nil
 }
 
@@ -35,7 +32,6 @@ func (a *App) getDecision(userID, flagName string) (bool, error) {
 func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 	cacheKey := fmt.Sprintf("flag_info:%s", flagName)
 
-	// 1. Tentar buscar do Cache (Redis)
 	val, err := a.RedisClient.Get(ctx, cacheKey).Result()
 	if err == nil {
 		// Cache HIT
@@ -44,18 +40,15 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 			log.Printf("Cache HIT para flag '%s'", flagName)
 			return &info, nil
 		}
-		// Se o unmarshal falhar, trata como cache miss
 		log.Printf("Erro ao desserializar cache para flag '%s': %v", flagName, err)
 	}
 	
 	log.Printf("Cache MISS para flag '%s'", flagName)
-	// 2. Cache MISS - Buscar dos serviços
 	info, err := a.fetchFromServices(flagName)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Salvar no Cache
 	jsonData, err := json.Marshal(info)
 	if err == nil {
 		_ = a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err()
@@ -73,13 +66,11 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 	var ruleInfo *TargetingRule
 	var flagErr, ruleErr error
 
-	// Goroutine 1: Buscar do flag-service
 	go func() {
 		defer wg.Done()
 		flagInfo, flagErr = a.fetchFlag(flagName)
 	}()
 
-	// Goroutine 2: Buscar do targeting-service
 	go func() {
 		defer wg.Done()
 		ruleInfo, ruleErr = a.fetchRule(flagName)
@@ -166,17 +157,14 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 		return true
 	}
 
-	// 3. Processa a regra (só temos "PERCENTAGE" por enquanto)
 	rule := info.Rule.Rules
 	if rule.Type == "PERCENTAGE" {
-		// Converte o 'value' (que é interface{}) para float64
 		percentage, ok := rule.Value.(float64)
 		if !ok {
 			log.Printf("Erro: valor da regra de porcentagem não é um número para a flag '%s'", info.Flag.Name)
 			return false
 		}
 		
-		// Calcula o "bucket" do usuário (0-99)
 		userBucket := getDeterministicBucket(userID + info.Flag.Name)
 		
 		if float64(userBucket) < percentage {
@@ -188,14 +176,11 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 }
 
 func getDeterministicBucket(input string) int {
-	// Usamos SHA1 (rápido) e pegamos os primeiros 4 bytes
 	hasher := sha1.New()
 	hasher.Write([]byte(input))
 	hash := hasher.Sum(nil)
 	
-	// Converte 4 bytes para um uint32
 	val := binary.BigEndian.Uint32(hash[:4])
 	
-	// Retorna o módulo 100
 	return int(val % 100)
 }

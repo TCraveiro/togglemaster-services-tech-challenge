@@ -9,16 +9,13 @@ from dotenv import load_dotenv
 from functools import wraps
 import logging
 
-# Configura o logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-# Carrega .env para desenvolvimento local
 load_dotenv()
 
 app = Flask(__name__)
 
-# --- Configuração ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL")
 
@@ -26,7 +23,6 @@ if not DATABASE_URL or not AUTH_SERVICE_URL:
     log.critical("Erro: DATABASE_URL e AUTH_SERVICE_URL devem ser definidos.")
     sys.exit(1)
 
-# --- Pool de Conexão com o Banco ---
 try:
     pool = SimpleConnectionPool(1, 5, dsn=DATABASE_URL)
     log.info("Pool de conexões com o PostgreSQL (targeting) inicializado.")
@@ -35,7 +31,6 @@ except psycopg2.OperationalError as e:
     sys.exit(1)
 
 # --- Middleware de Autenticação (Idêntico ao flag-service) ---
-
 
 def require_auth(f):
     """ Middleware para validar a chave de API contra o auth-service """
@@ -63,13 +58,9 @@ def require_auth(f):
         return f(*args, **kwargs)
     return decorated
 
-# --- Endpoints da API ---
-
-
 @app.route('/health')
 def health():
     return jsonify({"status": "ok"})
-
 
 @app.route('/rules', methods=['POST'])
 @require_auth
@@ -113,7 +104,6 @@ def create_rule():
         if conn:
             pool.putconn(conn)
 
-
 @app.route('/rules/<string:flag_name>', methods=['GET'])
 @require_auth
 def get_rule(flag_name):
@@ -136,7 +126,6 @@ def get_rule(flag_name):
             cur.close()
         if conn:
             pool.putconn(conn)
-
 
 @app.route('/rules/<string:flag_name>', methods=['PUT'])
 @require_auth
@@ -188,7 +177,6 @@ def update_rule(flag_name):
         if conn:
             pool.putconn(conn)
 
-
 @app.route('/rules/<string:flag_name>', methods=['DELETE'])
 @require_auth
 def delete_rule(flag_name):
@@ -216,7 +204,6 @@ def delete_rule(flag_name):
             cur.close()
         if conn:
             pool.putconn(conn)
-
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8003))

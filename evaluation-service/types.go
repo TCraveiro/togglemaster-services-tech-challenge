@@ -2,8 +2,6 @@ package main
 
 import "fmt"
 
-// --- Estruturas de Dados ---
-
 // Flag espelha a resposta do flag-service
 type Flag struct {
 	ID          int    `json:"id"`
