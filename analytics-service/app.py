@@ -40,6 +40,7 @@ except Exception as e:
 
 # --- SQS Worker ---
 
+
 def process_message(message):
     """ Processa uma única mensagem SQS e a insere no DynamoDB """
     try:
@@ -76,6 +77,7 @@ def process_message(message):
         log.error(f"Erro inesperado ao processar {message['MessageId']}: {e}")
         # Não deleta a mensagem, tenta novamente
 
+
 def sqs_worker_loop():
     """ Loop principal do worker que ouve a fila SQS """
     log.info("Iniciando o worker SQS...")
@@ -103,7 +105,9 @@ def sqs_worker_loop():
             log.error(f"Erro inesperado no loop principal do SQS: {e}")
             time.sleep(10)
 
+
 app = Flask(__name__)
+
 
 @app.route('/health')
 def health():
@@ -111,10 +115,12 @@ def health():
 
 # --- Inicialização ---
 
+
 def start_worker():
     """ Inicia o worker SQS em uma thread separada """
     worker_thread = threading.Thread(target=sqs_worker_loop, daemon=True)
     worker_thread.start()
+
 
 start_worker()
 

@@ -32,6 +32,7 @@ except psycopg2.OperationalError as e:
 
 # --- Middleware de Autenticação (Idêntico ao flag-service) ---
 
+
 def require_auth(f):
     """ Middleware para validar a chave de API contra o auth-service """
     @wraps(f)
@@ -58,9 +59,11 @@ def require_auth(f):
         return f(*args, **kwargs)
     return decorated
 
+
 @app.route('/health')
 def health():
     return jsonify({"status": "ok"})
+
 
 @app.route('/rules', methods=['POST'])
 @require_auth
@@ -104,6 +107,7 @@ def create_rule():
         if conn:
             pool.putconn(conn)
 
+
 @app.route('/rules/<string:flag_name>', methods=['GET'])
 @require_auth
 def get_rule(flag_name):
@@ -126,6 +130,7 @@ def get_rule(flag_name):
             cur.close()
         if conn:
             pool.putconn(conn)
+
 
 @app.route('/rules/<string:flag_name>', methods=['PUT'])
 @require_auth
@@ -177,6 +182,7 @@ def update_rule(flag_name):
         if conn:
             pool.putconn(conn)
 
+
 @app.route('/rules/<string:flag_name>', methods=['DELETE'])
 @require_auth
 def delete_rule(flag_name):
@@ -204,6 +210,7 @@ def delete_rule(flag_name):
             cur.close()
         if conn:
             pool.putconn(conn)
+
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8003))
