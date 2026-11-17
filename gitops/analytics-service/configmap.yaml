@@ -4,6 +4,6 @@ metadata:
   name: analytics-service-config
   namespace: togglemaster
 data:
-  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/221079493511/ToggleMasterQueue"
+  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/785077656057/ToggleMasterQueue"
   AWS_DYNAMODB_TABLE: "ToggleMasterAnalytics"
   AWS_REGION: "us-east-1"
