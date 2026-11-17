@@ -1,6 +1,7 @@
 name: CI - targeting-service
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ["targeting-service/**", ".github/workflows/targeting-service.yml"]
