@@ -1,7 +1,7 @@
 # OpenTelemetry Collector como DaemonSet (um agente por nó).
 # Peça central da telemetria: recebe OTLP dos microsserviços e coleta os logs
 # de todos os contêineres do nó, enriquece com metadados do Kubernetes e roteia:
-#   métricas -> Prometheus (OTLP)   logs -> Loki (OTLP)   traces -> APM
+#   métricas -> Prometheus (OTLP)   logs -> Loki (OTLP)   traces e métricas das apps -> New Relic
 mode: daemonset
 fullnameOverride: otel-collector
 
@@ -30,6 +30,14 @@ ports:
   zipkin:
     enabled: false
 
+# License Key do New Relic vem de um Secret criado manualmente (nunca versionado)
+extraEnvs:
+  - name: NEW_RELIC_LICENSE_KEY
+    valueFrom:
+      secretKeyRef:
+        name: newrelic-license
+        key: NEW_RELIC_LICENSE_KEY
+
 resources:
   requests:
     cpu: 100m
@@ -52,6 +60,11 @@ config:
       endpoint: http://kps-prometheus.observability.svc.cluster.local:9090/api/v1/otlp
     otlphttp/loki:
       endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+    # APM: New Relic recebe OTLP nativamente (sem agente proprietário)
+    otlphttp/newrelic:
+      endpoint: https://otlp.nr-data.net
+      headers:
+        api-key: ${env:NEW_RELIC_LICENSE_KEY}
     debug:
       verbosity: basic
   service:
@@ -64,8 +77,13 @@ config:
         receivers: [otlp]
         processors: [memory_limiter, resource/cluster, batch]
         exporters: [otlphttp/loki]
-      # Traces: por enquanto só no debug; o exporter do New Relic entra na etapa de APM
+      # Métricas das aplicações também vão para o New Relic (gráficos de APM do serviço)
+      metrics/apm:
+        receivers: [otlp]
+        processors: [memory_limiter, resource/cluster, batch]
+        exporters: [otlphttp/newrelic]
+      # Traces distribuídos -> New Relic (Distributed Tracing e Service Map)
       traces:
         receivers: [otlp]
         processors: [memory_limiter, resource/cluster, batch]
-        exporters: [debug]
+        exporters: [otlphttp/newrelic]
