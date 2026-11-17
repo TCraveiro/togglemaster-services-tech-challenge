@@ -1,0 +1,65 @@
+# Prometheus + Grafana + kube-state-metrics + node-exporter
+fullnameOverride: kps
+
+# O Alertmanager não é usado: os alertas são gerenciados pelo Grafana
+# (contact points PagerDuty, Discord e webhook de self-healing).
+alertmanager:
+  enabled: false
+
+# Componentes do control plane do EKS são gerenciados pela AWS e não expõem métricas:
+# desabilitados para não gerar targets "down" e alertas falsos (alert fatigue).
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    # Recebe as métricas enviadas pelo OTel Collector (endpoint /api/v1/otlp)
+    enableOTLPReceiver: true
+    otlp:
+      promoteResourceAttributes:
+        - k8s.namespace.name
+        - k8s.deployment.name
+        - k8s.pod.name
+    retention: 2d
+    # Descobre ServiceMonitors/PodMonitors/regras de qualquer release, não só deste chart
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1536Mi
+
+grafana:
+  # Senha do admin vem de um Secret criado manualmente (nunca versionado)
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  defaultDashboardsTimezone: browser
+  sidecar:
+    datasources:
+      alertmanager:
+        enabled: false
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki.observability.svc.cluster.local:3100
+      jsonData:
+        maxLines: 1000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

@@ -9,3 +9,4 @@ __pycache__/
 # Secrets do Kubernetes: aplicados manualmente, nunca versionados
 **/secret.yaml
 tfplan
+.chart-defaults/

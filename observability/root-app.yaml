@@ -1,0 +1,20 @@
+# Application "raiz" (padrão app-of-apps): o ArgoCD lê a pasta observability/apps
+# e cria uma Application para cada componente da stack de observabilidade.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/TCraveiro/togglemaster-services-tech-challenge.git
+    targetRevision: main
+    path: observability/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

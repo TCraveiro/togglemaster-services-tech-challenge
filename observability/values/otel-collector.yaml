@@ -1,0 +1,71 @@
+# OpenTelemetry Collector como DaemonSet (um agente por nó).
+# Peça central da telemetria: recebe OTLP dos microsserviços e coleta os logs
+# de todos os contêineres do nó, enriquece com metadados do Kubernetes e roteia:
+#   métricas -> Prometheus (OTLP)   logs -> Loki (OTLP)   traces -> APM
+mode: daemonset
+fullnameOverride: otel-collector
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+presets:
+  # filelog receiver lendo /var/log/pods de cada nó
+  logsCollection:
+    enabled: true
+  # k8s_attributes: adiciona namespace, pod, deployment etc. a métricas, logs e traces
+  kubernetesAttributes:
+    enabled: true
+
+# Service ClusterIP (internalTrafficPolicy: Local): cada pod envia para o agente do seu nó
+service:
+  enabled: true
+
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+  processors:
+    resource/cluster:
+      attributes:
+        - key: k8s.cluster.name
+          value: togglemaster-cluster
+          action: upsert
+  exporters:
+    otlphttp/prometheus:
+      endpoint: http://kps-prometheus.observability.svc.cluster.local:9090/api/v1/otlp
+    otlphttp/loki:
+      endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+    debug:
+      verbosity: basic
+  service:
+    pipelines:
+      metrics:
+        receivers: [otlp, prometheus]
+        processors: [memory_limiter, resource/cluster, batch]
+        exporters: [otlphttp/prometheus]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, resource/cluster, batch]
+        exporters: [otlphttp/loki]
+      # Traces: por enquanto só no debug; o exporter do New Relic entra na etapa de APM
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, resource/cluster, batch]
+        exporters: [debug]
