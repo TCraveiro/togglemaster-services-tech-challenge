@@ -1,0 +1,23 @@
+# Dashboards customizados do Grafana (ConfigMaps em observability/dashboards)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-dashboards
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/TCraveiro/togglemaster-services-tech-challenge.git
+    targetRevision: main
+    path: observability/dashboards
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

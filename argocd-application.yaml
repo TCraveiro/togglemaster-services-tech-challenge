@@ -18,9 +18,21 @@ spec:
     server: https://kubernetes.default.svc
     namespace: togglemaster
 
+  # O self-healer reinicia deployments alterando estas anotações do template do pod
+  # (mesmo mecanismo do "kubectl rollout restart"). Sem isto, o selfHeal do ArgoCD
+  # enxergaria a diferença em relação ao Git, desfaria a anotação e causaria um
+  # segundo restart desnecessário.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt
+        - /spec/template/metadata/annotations/togglemaster~1restarted-by
+
   syncPolicy:
     automated:
       prune: true      # remove recursos que saírem do Git
       selfHeal: true    # corrige mudanças manuais feitas fora do Git
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true

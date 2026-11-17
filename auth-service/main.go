@@ -63,8 +63,11 @@ func main() {
 
 	mux.Handle("/admin/keys", app.masterKeyAuthMiddleware(http.HandlerFunc(app.createKeyHandler)))
 
+	// Injeção de falha para a demonstração de Self-Healing (protegida pela MASTER_KEY)
+	mux.Handle("/admin/chaos", app.masterKeyAuthMiddleware(http.HandlerFunc(app.chaosHandler)))
+
 	log.Printf("Serviço de Autenticação (Go) rodando na porta %s", port)
-	if err := http.ListenAndServe(":"+port, instrumentHandler(mux, "auth-service")); err != nil {
+	if err := http.ListenAndServe(":"+port, instrumentHandler(chaosMiddleware(mux), "auth-service")); err != nil {
 		log.Fatal(err)
 	}
 }

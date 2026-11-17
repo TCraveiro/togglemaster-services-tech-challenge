@@ -1,0 +1,215 @@
+# Self-Healing (Runbook Automation): recebe o webhook do Grafana Alerting e executa
+# "kubectl rollout restart" no deployment afetado, sem intervenção humana.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: self-healer
+  namespace: togglemaster
+---
+# Permissão mínima: ler e "patchar" Deployments apenas no namespace togglemaster
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: self-healer
+  namespace: togglemaster
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: self-healer
+  namespace: togglemaster
+subjects:
+  - kind: ServiceAccount
+    name: self-healer
+    namespace: togglemaster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: self-healer
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: self-healer-script
+  namespace: togglemaster
+data:
+  self-healer.py: |
+    """
+    Self-Healer do ToggleMaster (Runbook Automation).
+
+    Recebe o webhook do Grafana Alerting e executa automaticamente o equivalente a
+    "kubectl rollout restart deployment/<nome>" para o deployment indicado no label
+    "deployment" do alerta. Usa só a biblioteca padrão do Python e a API do Kubernetes
+    com o ServiceAccount do próprio pod (RBAC restrito a get/patch de Deployments).
+    """
+    import json
+    import os
+    import ssl
+    import time
+    import urllib.request
+    from datetime import datetime, timezone
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    NAMESPACE = os.getenv("TARGET_NAMESPACE", "togglemaster")
+    ALLOWED = {d.strip() for d in os.getenv("ALLOWED_DEPLOYMENTS", "").split(",") if d.strip()}
+    COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "180"))
+
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    API = f"https://{os.getenv('KUBERNETES_SERVICE_HOST')}:{os.getenv('KUBERNETES_SERVICE_PORT', '443')}"
+
+    last_restart = {}
+
+
+    def log(event, **fields):
+        """ Log estruturado (JSON) no stdout: coletado pelo OTel Collector e consultável no Loki """
+        print(json.dumps({"ts": datetime.now(timezone.utc).isoformat(), "component": "self-healer",
+                          "event": event, **fields}), flush=True)
+
+
+    def rollout_restart(deployment):
+        """ Mesmo efeito do 'kubectl rollout restart': altera uma anotação do template do pod """
+        with open(f"{SA_DIR}/token") as f:
+            token = f.read()
+        ctx = ssl.create_default_context(cafile=f"{SA_DIR}/ca.crt")
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        body = {"spec": {"template": {"metadata": {"annotations": {
+            "kubectl.kubernetes.io/restartedAt": now,
+            "togglemaster/restarted-by": "self-healer",
+        }}}}}
+        req = urllib.request.Request(
+            f"{API}/apis/apps/v1/namespaces/{NAMESPACE}/deployments/{deployment}",
+            data=json.dumps(body).encode(),
+            method="PATCH",
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "application/strategic-merge-patch+json"},
+        )
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:  # nosec B310 - URL fixa da API do cluster
+            return resp.status
+
+
+    def handle_alert(alert):
+        labels = alert.get("labels", {})
+        name = labels.get("alertname", "?")
+        deployment = labels.get("deployment")
+
+        if alert.get("status") != "firing":
+            log("alert_resolved", alert=name, deployment=deployment)
+            return
+        if not deployment or deployment not in ALLOWED:
+            log("ignored", alert=name, deployment=deployment, reason="deployment fora da allowlist")
+            return
+
+        elapsed = time.time() - last_restart.get(deployment, 0)
+        if elapsed < COOLDOWN_SECONDS:
+            log("skipped_cooldown", alert=name, deployment=deployment,
+                seconds_remaining=int(COOLDOWN_SECONDS - elapsed))
+            return
+
+        log("remediation_started", alert=name, deployment=deployment,
+            action=f"kubectl rollout restart deployment/{deployment} -n {NAMESPACE}")
+        try:
+            status = rollout_restart(deployment)
+            last_restart[deployment] = time.time()
+            log("remediation_done", alert=name, deployment=deployment, http_status=status)
+        except Exception as e:  # noqa: BLE001
+            log("remediation_failed", alert=name, deployment=deployment, error=str(e))
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError:
+                self.send_response(400)
+                self.end_headers()
+                return
+            alerts = payload.get("alerts", [])
+            log("webhook_received", status=payload.get("status"), alerts=len(alerts))
+            for alert in alerts:
+                handle_alert(alert)
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"received":true}')
+
+        def log_message(self, *args):
+            pass  # o log de acesso padrão é substituído pelos logs estruturados acima
+
+
+    if __name__ == "__main__":
+        log("started", namespace=NAMESPACE, allowed=sorted(ALLOWED), cooldown_seconds=COOLDOWN_SECONDS)
+        HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()  # nosec B104 - acesso só via Service ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: self-healer
+  namespace: togglemaster
+  labels:
+    app: self-healer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: self-healer
+  template:
+    metadata:
+      labels:
+        app: self-healer
+    spec:
+      serviceAccountName: self-healer
+      containers:
+        - name: self-healer
+          image: python:3.12-alpine
+          command: ["python", "/app/self-healer.py"]
+          env:
+            - name: TARGET_NAMESPACE
+              value: togglemaster
+            # Allowlist: só estes deployments podem ser reiniciados automaticamente
+            - name: ALLOWED_DEPLOYMENTS
+              value: auth-service,flag-service,targeting-service,evaluation-service,analytics-service
+            # Evita loop de restarts enquanto o alerta continua disparando
+            - name: COOLDOWN_SECONDS
+              value: "180"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: script
+              mountPath: /app
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+      volumes:
+        - name: script
+          configMap:
+            name: self-healer-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: self-healer
+  namespace: togglemaster
+spec:
+  selector:
+    app: self-healer
+  ports:
+    - port: 8080
+      targetPort: 8080

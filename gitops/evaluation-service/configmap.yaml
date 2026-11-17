@@ -4,8 +4,8 @@ metadata:
   name: evaluation-service-config
   namespace: togglemaster
 data:
-  REDIS_URL: "redis://togglemaster-redis.uslspv.0001.use1.cache.amazonaws.com:6379"
+  REDIS_URL: "redis://togglemaster-redis.knkoox.0001.use1.cache.amazonaws.com:6379"
   FLAG_SERVICE_URL: "http://flag-service:8002"
   TARGETING_SERVICE_URL: "http://targeting-service:8003"
-  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/785077656057/ToggleMasterQueue"
+  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/211125689110/ToggleMasterQueue"
   AWS_REGION: "us-east-1"

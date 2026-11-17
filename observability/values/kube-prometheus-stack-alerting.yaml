@@ -1,0 +1,120 @@
+# Alertas inteligentes do Grafana (provisionados via GitOps).
+# Fluxo: regra (5xx do auth-service > 5%) -> política de notificação ->
+#   self-healing (webhook do self-healer: kubectl rollout restart)
+#   PagerDuty (abre incidente)  +  Discord (ChatOps)
+# Segredos (integration key do PagerDuty e webhook do Discord) vêm do Secret
+# "grafana-alerting", criado manualmente e nunca versionado.
+grafana:
+  envFromSecrets:
+    - name: grafana-alerting
+      optional: true
+
+  alerting:
+    rules.yaml:
+      apiVersion: 1
+      groups:
+        - orgId: 1
+          name: togglemaster-slo
+          folder: ToggleMaster
+          interval: 30s
+          rules:
+            - uid: auth-service-5xx-rate
+              title: auth-service - taxa de erros HTTP 5xx acima de 5%
+              condition: C
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: prometheus
+                  model:
+                    refId: A
+                    instant: true
+                    expr: >-
+                      100 * sum(rate(http_server_request_duration_seconds_count{job="togglemaster/auth-service", http_response_status_code=~"5.."}[1m]))
+                      / sum(rate(http_server_request_duration_seconds_count{job="togglemaster/auth-service"}[1m]))
+                - refId: C
+                  datasourceUid: __expr__
+                  model:
+                    refId: C
+                    type: threshold
+                    expression: A
+                    conditions:
+                      - evaluator:
+                          type: gt
+                          params: [5]
+              # Sem tráfego não há o que avaliar: não alerta (evita alert fatigue)
+              noDataState: OK
+              execErrState: Error
+              # Precisa ficar acima do limite por 1 minuto antes de disparar
+              for: 1m
+              labels:
+                severity: critical
+                team: togglemaster
+                service: auth-service
+                deployment: auth-service
+                self_healing: "true"
+              annotations:
+                summary: auth-service retornando mais de 5% de respostas HTTP 5xx
+                description: >-
+                  A taxa de erros 5xx do auth-service passou de 5% no último minuto.
+                  Impacto: flag-service e targeting-service não conseguem validar API keys
+                  e o evaluation-service passa a responder 502.
+                  Ação automática: o self-healer executa kubectl rollout restart deployment/auth-service.
+                runbook_url: https://github.com/TCraveiro/togglemaster-services-tech-challenge/tree/main/gitops/self-healing
+
+    contactpoints.yaml:
+      apiVersion: 1
+      contactPoints:
+        - orgId: 1
+          name: self-healing
+          receivers:
+            - uid: self-healing-webhook
+              type: webhook
+              settings:
+                url: http://self-healer.togglemaster.svc.cluster.local:8080/
+                httpMethod: POST
+        - orgId: 1
+          name: pagerduty
+          receivers:
+            - uid: pagerduty-togglemaster
+              type: pagerduty
+              settings:
+                integrationKey: ${PAGERDUTY_INTEGRATION_KEY}
+                severity: critical
+                class: http-5xx
+                group: togglemaster
+        - orgId: 1
+          name: discord
+          receivers:
+            - uid: discord-alertas
+              type: discord
+              settings:
+                url: ${DISCORD_WEBHOOK_URL}
+                use_discord_username: false
+
+    policies.yaml:
+      apiVersion: 1
+      policies:
+        - orgId: 1
+          receiver: discord
+          group_by: [alertname, service]
+          group_wait: 10s
+          group_interval: 1m
+          repeat_interval: 1h
+          routes:
+            # 1) Remediação automática primeiro (continue: true -> segue para as próximas rotas)
+            - receiver: self-healing
+              object_matchers:
+                - [self_healing, "=", "true"]
+              group_wait: 0s
+              continue: true
+            # 2) Incidente no PagerDuty para alertas críticos
+            - receiver: pagerduty
+              object_matchers:
+                - [severity, "=", "critical"]
+              continue: true
+            # 3) Notificação detalhada no Discord (ChatOps)
+            - receiver: discord
+              object_matchers:
+                - [team, "=", "togglemaster"]
