@@ -27,6 +27,14 @@ singleBinary:
   # Aceitável para o ambiente do AWS Academy, que é recriado a cada sessão.
   persistence:
     enabled: false
+  # Sem PVC, o chart não monta nada em /var/loki e a raiz do contêiner é read-only:
+  # montamos um emptyDir para dados (chunks, índice TSDB, WAL e regras).
+  extraVolumes:
+    - name: loki-data
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: loki-data
+      mountPath: /var/loki
   resources:
     requests:
       cpu: 100m
