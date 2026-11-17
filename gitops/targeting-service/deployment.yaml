@@ -25,13 +25,37 @@ spec:
                 name: targeting-service-secret
             - configMapRef:
                 name: targeting-service-config
+          # OpenTelemetry: SDK configurado só por variáveis padrão OTEL_*.
+          # Os pods enviam traces e métricas via OTLP/HTTP para o OTel Collector do próprio nó.
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: targeting-service
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=togglemaster,deployment.environment.name=production
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.observability.svc.cluster.local:4318
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: http/protobuf
+            # Logs continuam saindo no stdout (coletados pelo filelog do Collector), com trace_id/span_id
+            - name: OTEL_LOGS_EXPORTER
+              value: none
+            - name: OTEL_PYTHON_LOG_CORRELATION
+              value: "true"
+            - name: OTEL_METRIC_EXPORT_INTERVAL
+              value: "15000"
+            # Métricas HTTP no padrão estável (http.server.request.duration), igual aos serviços Go
+            - name: OTEL_SEMCONV_STABILITY_OPT_IN
+              value: http
+            - name: OTEL_PYTHON_FLASK_EXCLUDED_URLS
+              value: health
           resources:
             requests:
               cpu: "100m"
-              memory: "64Mi"
+              memory: "128Mi"
             limits:
               cpu: "250m"
-              memory: "128Mi"
+              # Margem para o SDK do OpenTelemetry e as instrumentações
+              memory: "256Mi"
           livenessProbe:
             httpGet:
               path: /health

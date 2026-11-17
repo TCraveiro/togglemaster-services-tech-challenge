@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type EvaluationResponse struct {
@@ -29,7 +32,7 @@ func (a *App) evaluationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := a.getDecision(userID, flagName)
+	result, err := a.getDecision(r.Context(), userID, flagName)
 	if err != nil {
 		if _, ok := err.(*NotFoundError); ok {
 			result = false
@@ -40,7 +43,10 @@ func (a *App) evaluationHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	go a.sendEvaluationEvent(userID, flagName, result)
+	// O envio para o SQS é assíncrono e termina depois da resposta HTTP: usamos um contexto
+	// novo (sem cancelamento) que carrega apenas o span da requisição como pai
+	eventCtx := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(r.Context()))
+	go a.sendEvaluationEvent(eventCtx, userID, flagName, result)
 
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(EvaluationResponse{

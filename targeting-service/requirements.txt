@@ -3,3 +3,7 @@ psycopg2-binary==2.9.9
 gunicorn==22.0.0
 python-dotenv==1.0.1
 requests==2.32.3
+
+# OpenTelemetry: auto-instrumentação (Flask, requests, psycopg2, botocore) e exportador OTLP/HTTP
+opentelemetry-distro
+opentelemetry-exporter-otlp-proto-http==1.45.2

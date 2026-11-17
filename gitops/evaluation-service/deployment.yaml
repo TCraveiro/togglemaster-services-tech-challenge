@@ -25,6 +25,17 @@ spec:
                 name: evaluation-service-secret
             - configMapRef:
                 name: evaluation-service-config
+          # OpenTelemetry: SDK configurado só por variáveis padrão OTEL_*.
+          # Os pods enviam traces e métricas via OTLP/HTTP para o OTel Collector do próprio nó.
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: evaluation-service
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=togglemaster,deployment.environment.name=production
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.observability.svc.cluster.local:4318
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: http/protobuf
           resources:
             requests:
               cpu: "50m"

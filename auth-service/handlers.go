@@ -39,7 +39,7 @@ func (a *App) validateKeyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Verifica se o hash existe no banco de dados
 	var id int
-	err := a.DB.QueryRow("SELECT id FROM api_keys WHERE key_hash = $1 AND is_active = true", keyHash).Scan(&id)
+	err := a.DB.QueryRowContext(r.Context(), "SELECT id FROM api_keys WHERE key_hash = $1 AND is_active = true", keyHash).Scan(&id)
 	if err != nil {
 		log.Printf("Falha na validação da chave (hash: %s...): %v", keyHash[:6], err)
 		http.Error(w, "Chave de API inválida ou inativa", http.StatusUnauthorized)
@@ -77,7 +77,8 @@ func (a *App) createKeyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Salva o hash no banco de dados
 	var newID int
-	err = a.DB.QueryRow(
+	err = a.DB.QueryRowContext(
+		r.Context(),
 		"INSERT INTO api_keys (name, key_hash) VALUES ($1, $2) RETURNING id",
 		req.Name, newKeyHash,
 	).Scan(&newID)

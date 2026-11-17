@@ -1,16 +1,2 @@
-# Risco aceito: vulnerabilidades em golang.org/x/net (dependência transitiva,
-# não usada diretamente pelo evaluation-service). Subpacotes afetados (html,
-# idna, http2, dns/dnsmessage) não são invocados pela aplicação - superfície
-# de ataque não alcançável. Corrigir exigiria x/net >= 0.55.0/0.56.0, que por
-# sua vez exige Go >= 1.25 - incompatível com o golangci-lint-action usado no
-# pipeline (compilado com Go 1.24).
-CVE-2026-25681
-CVE-2026-27136
-CVE-2026-33814
-CVE-2026-39821
-CVE-2026-46600
-# x/text: mesmo motivo acima (DoS em perfil Nickname, não usado pela aplicação). Revisar ao atualizar o Go na instrumentação OTel.
-CVE-2026-56851
-# x/net html e http2: mesmo motivo acima. Revisar ao atualizar o Go na instrumentação OTel.
-CVE-2026-78661
-CVE-2026-78669
+# Sem aceites de risco pendentes: as dependências golang.org/x/* foram atualizadas
+# junto com a instrumentação OpenTelemetry (Go >= 1.25 liberado pelo golangci-lint v2).

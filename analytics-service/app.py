@@ -9,6 +9,7 @@ import boto3
 from botocore.exceptions import NoCredentialsError, ClientError
 from flask import Flask, jsonify
 from dotenv import load_dotenv
+from opentelemetry import propagate, trace
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
@@ -38,11 +39,39 @@ except Exception as e:
     log.critical(f"Erro ao inicializar o Boto3: {e}")
     sys.exit(1)
 
+# Tracer do OpenTelemetry (o SDK é configurado pelo opentelemetry-instrument no Dockerfile)
+tracer = trace.get_tracer(__name__)
+
 # --- SQS Worker ---
 
 
+def trace_context_from_message(message):
+    """ Extrai o contexto de trace (traceparent) que o evaluation-service injetou nos MessageAttributes """
+    carrier = {
+        key: value.get('StringValue', '')
+        for key, value in message.get('MessageAttributes', {}).items()
+    }
+    return propagate.extract(carrier)
+
+
 def process_message(message):
-    """ Processa uma única mensagem SQS e a insere no DynamoDB """
+    """ Processa uma única mensagem SQS dentro de um span CONSUMER que continua o trace da avaliação """
+    with tracer.start_as_current_span(
+        "ToggleMasterQueue process",
+        context=trace_context_from_message(message),
+        kind=trace.SpanKind.CONSUMER,
+        attributes={
+            "messaging.system": "aws_sqs",
+            "messaging.operation.type": "process",
+            "messaging.destination.name": "ToggleMasterQueue",
+            "messaging.message.id": message['MessageId'],
+        },
+    ):
+        save_message(message)
+
+
+def save_message(message):
+    """ Insere o evento no DynamoDB e remove a mensagem da fila """
     try:
         log.info(f"Processando mensagem ID: {message['MessageId']}")
         body = json.loads(message['Body'])
@@ -86,6 +115,7 @@ def sqs_worker_loop():
             response = sqs_client.receive_message(
                 QueueUrl=SQS_QUEUE_URL,
                 MaxNumberOfMessages=10,  # Processa em lotes de até 10
+                MessageAttributeNames=['All'],  # Necessário para receber o traceparent
                 WaitTimeSeconds=20
             )
 

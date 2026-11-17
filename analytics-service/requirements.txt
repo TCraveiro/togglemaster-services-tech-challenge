@@ -2,3 +2,7 @@ Flask==3.0.3
 gunicorn==22.0.0
 python-dotenv==1.0.1
 boto3==1.34.144
+
+# OpenTelemetry: auto-instrumentação (Flask, requests, psycopg2, botocore) e exportador OTLP/HTTP
+opentelemetry-distro
+opentelemetry-exporter-otlp-proto-http==1.45.2

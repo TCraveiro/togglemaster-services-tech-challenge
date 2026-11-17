@@ -1,0 +1,11 @@
+# Configuração do golangci-lint v2
+version: "2"
+
+linters:
+  # Linters padrão: errcheck, govet, ineffassign, staticcheck e unused
+  default: standard
+  exclusions:
+    # Ignora padrões idiomáticos de Go (ex.: não checar o erro de defer resp.Body.Close())
+    presets:
+      - std-error-handling
+      - common-false-positives

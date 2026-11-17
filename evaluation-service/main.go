@@ -12,10 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
-
-// Contexto global para o Redis
-var ctx = context.Background()
 
 // App struct para injeção de dependência
 type App struct {
@@ -29,6 +27,14 @@ type App struct {
 
 func main() {
 	_ = godotenv.Load() // Carrega .env para dev local
+
+	// Telemetria (OpenTelemetry): se falhar, o serviço continua funcionando sem ela
+	shutdown, err := setupOTel(context.Background())
+	if err != nil {
+		log.Printf("Aviso: OpenTelemetry não inicializado: %v", err)
+	} else {
+		defer func() { _ = shutdown(context.Background()) }()
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -59,13 +65,12 @@ func main() {
 		log.Fatal("AWS_REGION deve ser definida para usar SQS")
 	}
 
-	
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
 		log.Fatalf("Não foi possível parsear a URL do Redis: %v", err)
 	}
 	rdb := redis.NewClient(opt)
-	if _, err := rdb.Ping(ctx).Result(); err != nil {
+	if _, err := rdb.Ping(context.Background()).Result(); err != nil {
 		log.Fatalf("Não foi possível conectar ao Redis: %v", err)
 	}
 	log.Println("Conectado ao Redis com sucesso!")
@@ -81,8 +86,11 @@ func main() {
 		log.Println("Cliente SQS inicializado com sucesso.")
 	}
 
+	// O transport do otelhttp cria um span CLIENT por chamada e injeta o header
+	// traceparent, continuando o trace no flag-service e no targeting-service
 	httpClient := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:   5 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
 
 	app := &App{
@@ -99,7 +107,7 @@ func main() {
 	mux.HandleFunc("/evaluate", app.evaluationHandler)
 
 	log.Printf("Serviço de Avaliação (Go) rodando na porta %s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	if err := http.ListenAndServe(":"+port, instrumentHandler(mux, "evaluation-service")); err != nil {
 		log.Fatal(err)
 	}
 }
