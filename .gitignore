@@ -5,3 +5,7 @@ evaluation-service/evaluation-service
 *.tar.gz
 __pycache__/
 *.pyc
+
+# Secrets do Kubernetes: aplicados manualmente, nunca versionados
+**/secret.yaml
+tfplan
