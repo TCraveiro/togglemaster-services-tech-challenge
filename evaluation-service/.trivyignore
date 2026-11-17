@@ -9,3 +9,5 @@ CVE-2026-27136
 CVE-2026-33814
 CVE-2026-39821
 CVE-2026-46600
+# x/text: mesmo motivo acima (DoS em perfil Nickname, não usado pela aplicação). Revisar ao atualizar o Go na instrumentação OTel.
+CVE-2026-56851
